@@ -103,18 +103,24 @@ export class GoldPulseChart {
       color: '#f3d060',   // Light Gold
       lineWidth: 1.5,
       title: 'EMA 21',
+      priceLineVisible: false,
+      lastValueVisible: false,
     });
 
     this.ema50Series = this.chart.addSeries(LineSeries, {
       color: '#aa7c11',   // Bronze
       lineWidth: 1.5,
       title: 'EMA 50',
+      priceLineVisible: false,
+      lastValueVisible: false,
     });
 
     this.ema200Series = this.chart.addSeries(LineSeries, {
       color: '#8a2be2',   // Deep Purple — institutional anchor
       lineWidth: 2,
       title: 'EMA 200',
+      priceLineVisible: false,
+      lastValueVisible: false,
     });
 
     // Auto-resize on container resize

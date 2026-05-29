@@ -42,7 +42,7 @@ export const api = {
     }
   },
 
-  // Fetch multi-timeframe data for price action analysis (D1, H1, M30, M5)
+  // Fetch multi-timeframe data for price action analysis (D1, H1, M30, M15, M5, M1)
   async fetchMultiTimeframe() {
     try {
       const response = await fetch(`${getBaseUrl()}/api/multi-timeframe`);
@@ -54,7 +54,7 @@ export const api = {
       }
 
       // Validate we got data for all timeframes
-      const required = ['d1', 'h1', 'm30', 'm5'];
+      const required = ['d1', 'h1', 'm30', 'm15', 'm5', 'm1'];
       for (const tf of required) {
         if (!Array.isArray(data[tf]) || data[tf].length === 0) {
           console.warn(`Multi-timeframe: missing or empty data for ${tf}`);
@@ -68,7 +68,9 @@ export const api = {
         d1:  generateSimulatedData(1440, 60),
         h1:  generateSimulatedData(60, 100),
         m30: generateSimulatedData(30, 120),
-        m5:  generateSimulatedData(5, 100)
+        m15: generateSimulatedData(15, 160),
+        m5:  generateSimulatedData(5, 200),
+        m1:  generateSimulatedData(1, 120)
       };
     }
   },

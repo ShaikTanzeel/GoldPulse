@@ -18,10 +18,7 @@ export const aiAnalyzer = {
   // ═══════════════════════════════════════════════════════════════
 
   async runIndicatorAnalysis(signalsData) {
-    const keys = store.get('apiKeys');
-    if (!keys || !keys.groq) {
-      throw new Error('Groq API Key is missing. Please configure it in Settings.');
-    }
+    const keys = store.get('apiKeys') || {};
 
     const { metrics, signal, score, reasons, setup, priceAction } = signalsData;
     const settings = store.get('settings');
@@ -52,26 +49,35 @@ export const aiAnalyzer = {
       messages: [
         {
           role: "system",
-          content: `You are an elite, institutional-grade Forex Trading Strategist specializing exclusively in XAUUSD (Gold Spot).
+          content: `You are an elite, institutional-grade Forex Trading Strategist specializing exclusively in XAUUSD (Gold Spot) under a strict LIQUIDITY SWEEP / BUY-THE-DIP strategy.
 
-CRITICAL RULES:
-1. You MUST analyze both the technical indicators AND the price action context provided.
-2. If indicators show a signal but price action contradicts (e.g., BUY signal at resistance), you MUST flag this conflict.
-3. Your response MUST be in two parts:
-   - Part 1: ANALYSIS (detailed reasoning, what you see across timeframes)
-   - Part 2: VERDICT (a structured decision block)
+THIS STRATEGY'S RULES:
+1. BUY ONLY: This trader is strictly LONG-ONLY. You must NEVER suggest selling. The only valid actions are [STRONG BUY, BUY, WAIT].
+2. BUY THE BOTTOM: The strategy focuses entirely on buying structural bottoms, NOT chasing momentum or buying breakouts.
+3. TRADE TRIGGERS: Trades require a high-probability Tier 1 price action setup (Liquidity Sweep below H1 swing lows with M5 close confirmation, Bullish FVG fill at support, or a breakout retest rejection candle on M5).
+4. CONTEXT & FILTERS: Technical indicators (RSI, EMA, MACD) are context ONLY — they NEVER generate trade signals on their own. We NEVER buy near H1/D1 resistance or when RSI is overbought (>70).
+5. CAPITAL PRESERVATION: The account balance is very small (~$50). We need tight stops (e.g. below sweep wicks) and high-confluence confirmations (volume spikes, engulfing candles at structure) to take risk.
+
+YOUR ROLE:
+- Critique the indicator signals and structural confluences. 
+- Overrule any indicator-based BUY signals to WAIT if they occur at the top of a move, near resistance, or when there is NO valid structural setup (sweep, FVG fill, reaccumulation, breakout-retest).
+- Ensure stops go below sweep lows and targets are structural (H1 resistance).
+
+Your response MUST be in two parts:
+- Part 1: ANALYSIS (Critique the sweep depth, candle close confirmation, volume confirmation, FVG support, and structural risk/reward ratio)
+- Part 2: VERDICT (A structured decision block)
 
 For Part 2, end your response with EXACTLY this format:
 ---VERDICT---
 CONFIDENCE: [0-100]
-ACTION: [STRONG BUY / BUY / WAIT / SELL / STRONG SELL]
-OVERRIDE: [YES/NO] (YES if you disagree with the indicator signal)
-OVERRIDE_REASON: [one line explanation if overriding, or "N/A"]
+ACTION: [STRONG BUY / BUY / WAIT]
+OVERRIDE: [YES/NO] (YES if you override the indicator-engine signal, e.g. indicators say BUY but you veto to WAIT)
+OVERRIDE_REASON: [one line explanation of why, or "N/A"]
 PRICE_ACTION_ALIGNMENT: [CONFIRMS / NEUTRAL / CONTRADICTS]
-KEY_RISK: [one line about the biggest risk]
-WATCH_FOR: [what would change your mind]
+KEY_RISK: [one line about the biggest risk, e.g. sweep was too deep, breakdown imminent, or resistance overhead]
+WATCH_FOR: [what price event would change your mind, e.g. M5 close above a specific level]
 
-You operate on a strict, professional, non-emotional level, prioritizing capital preservation above all, particularly for small retail accounts ($50 size).`
+You operate on a strict, professional, non-emotional level, prioritizing capital preservation above all else.`
         },
         {
           role: "user",
@@ -106,18 +112,18 @@ Provide your complete analysis followed by the ---VERDICT--- block.`
       max_tokens: 1500
     };
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const response = await fetch('/api/ai/indicator-analysis', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${keys.groq}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Groq-API-Key': keys.groq || ''
       },
       body: JSON.stringify(prompt)
     });
 
     if (!response.ok) {
       const err = await response.json();
-      throw new Error(err.error?.message || 'Failed to communicate with Groq AI API');
+      throw new Error(err.detail || 'Failed to communicate with Groq AI API');
     }
 
     const resData = await response.json();
@@ -131,10 +137,7 @@ Provide your complete analysis followed by the ---VERDICT--- block.`
   // ═══════════════════════════════════════════════════════════════
 
   async runVisualChartAnalysis(screenshots, currentSetupText) {
-    const keys = store.get('apiKeys');
-    if (!keys || !keys.gemini) {
-      throw new Error('Gemini API Key is missing. Please configure it in Settings.');
-    }
+    const keys = store.get('apiKeys') || {};
 
     // Build image parts for all available timeframe screenshots
     const tfLabels = { d1: 'DAILY', h1: '1-HOUR', m30: '30-MINUTE', m5: '5-MINUTE' };
@@ -200,17 +203,18 @@ RECOMMENDATION: [one line actionable recommendation]`
     };
 
     // Migrated to Gemini 2.5 Flash (2.0 Flash shuts down June 1, 2026)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${keys.gemini}`, {
+    const response = await fetch('/api/ai/visual-analysis', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Gemini-API-Key': keys.gemini || ''
       },
       body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
       const err = await response.json();
-      throw new Error(err.error?.message || 'Failed to communicate with Gemini Vision API');
+      throw new Error(err.detail || 'Failed to communicate with Gemini Vision API');
     }
 
     const resData = await response.json();

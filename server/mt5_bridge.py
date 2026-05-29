@@ -1,7 +1,10 @@
 import asyncio
 import json
 import logging
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+import os
+import urllib.request
+import urllib.error
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import MetaTrader5 as mt5
 
@@ -42,8 +45,30 @@ MTF_CONFIG = {
     "d1":  {"tf": mt5.TIMEFRAME_D1,  "count": 60,  "label": "Daily"},
     "h1":  {"tf": mt5.TIMEFRAME_H1,  "count": 100, "label": "1-Hour"},
     "m30": {"tf": mt5.TIMEFRAME_M30, "count": 120, "label": "30-Min"},
-    "m5":  {"tf": mt5.TIMEFRAME_M5,  "count": 100, "label": "5-Min"},
+    "m15": {"tf": mt5.TIMEFRAME_M15, "count": 160, "label": "15-Min"},
+    "m5":  {"tf": mt5.TIMEFRAME_M5,  "count": 200, "label": "5-Min"},
+    "m1":  {"tf": mt5.TIMEFRAME_M1,  "count": 120, "label": "1-Min"},
 }
+
+def load_env():
+    """
+    Dynamically loads .env file variables located in the parent directory
+    """
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env_path = os.path.join(parent_dir, ".env")
+    if os.path.exists(env_path):
+        logger.info(f"Loading environment from {env_path}")
+        with open(env_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ[k.strip()] = v.strip()
+    else:
+        logger.warning(f".env file not found at {env_path}")
+
+# Load key variables at runtime initialization
+load_env()
 
 def find_gold_symbol() -> str:
     """
@@ -123,7 +148,11 @@ def get_status():
         "account": acc_info.login if acc_info else None,
         "balance": acc_info.balance if acc_info else 0.0,
         "currency": acc_info.currency if acc_info else "USD",
-        "gold_symbol": GOLD_SYMBOL
+        "gold_symbol": GOLD_SYMBOL,
+        "ai_status": {
+            "groq_configured": bool(os.environ.get("GROQ_API_KEY")),
+            "gemini_configured": bool(os.environ.get("GEMINI_API_KEY"))
+        }
     }
 
 @app.get("/api/history")
@@ -194,6 +223,88 @@ def get_multi_timeframe():
 
     return result
 
+# ═══════════════════════════════════════════════════════════════
+# SECURE AI PROXY ENDPOINTS (Mitigates Exposed Keys Vulnerability)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/ai/indicator-analysis")
+async def proxy_indicator_analysis(payload: dict, x_groq_api_key: str = Header(None)):
+    """
+    Proxies trade setups safely to the Groq API, keeping keys completely hidden from client bundles
+    """
+    api_key = x_groq_api_key or os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="Groq API Key is missing. Please configure it.")
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=30) as response:
+            res_data = json.loads(response.read().decode("utf-8"))
+            return res_data
+    except urllib.error.HTTPError as e:
+        err_msg = e.read().decode("utf-8")
+        logger.error(f"Groq API Error: {err_msg}")
+        try:
+            parsed = json.loads(err_msg)
+            detail = parsed.get("error", {}).get("message", "Failed to communicate with Groq AI API")
+        except Exception:
+            detail = f"Groq HTTP Error {e.code}: {e.reason}"
+        raise HTTPException(status_code=e.code, detail=detail)
+    except Exception as e:
+        logger.error(f"Failed to communicate with Groq AI API: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ai/visual-analysis")
+async def proxy_visual_analysis(payload: dict, x_gemini_api_key: str = Header(None)):
+    """
+    Proxies visual chart updates securely to Gemini 2.5 Flash, preventing client key exposures
+    """
+    api_key = x_gemini_api_key or os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="Gemini API Key is missing. Please configure it.")
+
+    # Migrated to Gemini 2.5 Flash (2.0 Flash shuts down June 1, 2026)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=30) as response:
+            res_data = json.loads(response.read().decode("utf-8"))
+            return res_data
+    except urllib.error.HTTPError as e:
+        err_msg = e.read().decode("utf-8")
+        logger.error(f"Gemini API Error: {err_msg}")
+        try:
+            parsed = json.loads(err_msg)
+            detail = parsed.get("error", {}).get("message", "Failed to communicate with Gemini Vision API")
+        except Exception:
+            detail = f"Gemini HTTP Error {e.code}: {e.reason}"
+        raise HTTPException(status_code=e.code, detail=detail)
+    except Exception as e:
+        logger.error(f"Failed to communicate with Gemini Vision API: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ═══════════════════════════════════════════════════════════════
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -261,4 +372,6 @@ async def start_polling():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("mt5_bridge:app", host="0.0.0.0", port=8765, reload=True)
+    # Hardened binding: bind strictly to 127.0.0.1 (localhost) to prevent local network exploitation
+    logger.info("Starting GoldPulse Bridge on localhost:8765...")
+    uvicorn.run("mt5_bridge:app", host="127.0.0.1", port=8765, reload=True)

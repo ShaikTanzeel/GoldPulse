@@ -28,8 +28,8 @@ class Store {
       apiKeys: (() => {
         const stored = this.loadJson('goldpulse_api_keys', { groq: '', gemini: '' });
         return {
-          groq: stored.groq || import.meta.env.VITE_GROQ_API_KEY || '',
-          gemini: stored.gemini || import.meta.env.VITE_GEMINI_API_KEY || ''
+          groq: stored.groq || '',
+          gemini: stored.gemini || ''
         };
       })(),
       settings: this.loadJson('goldpulse_settings', {

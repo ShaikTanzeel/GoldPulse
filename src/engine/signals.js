@@ -9,14 +9,15 @@ import {
 import { analyzePriceAction } from './priceAction.js';
 
 /**
- * Confluence-Based Signal Engine for GoldPulse (MQL5 Strategy)
- * Now enhanced with multi-timeframe price action awareness.
+ * Confluence-Based Sweep/Buy-the-Dip Signal Engine for GoldPulse
+ * Pure price-action driven system with tiered scoring confluences.
  */
 export function generateSignals(ohlcv, mtfData = null) {
   if (!ohlcv || ohlcv.length < 200) {
     return {
       signal: 'WAIT',
       score: 0,
+      setupType: 'NONE',
       reasons: ['Insufficient historical data (minimum 200 candles required)'],
       metrics: {},
       priceAction: null
@@ -30,7 +31,7 @@ export function generateSignals(ohlcv, mtfData = null) {
   const len = closes.length;
   const currentPrice = closes[len - 1];
 
-  // Calculate indicators
+  // Calculate indicators for visual confluences & filters
   const ema21 = calculateEMA(closes, 21);
   const ema50 = calculateEMA(closes, 50);
   const ema200 = calculateEMA(closes, 200);
@@ -42,187 +43,270 @@ export function generateSignals(ohlcv, mtfData = null) {
   const keyLevels = detectSupportResistance(highs, lows, closes, 20);
   const divergence = detectDivergence(closes, rsi, 20);
 
-  // Latest indicator readings
   const currEma21 = ema21[len - 1];
   const currEma50 = ema50[len - 1];
   const currEma200 = ema200[len - 1];
   
   const currRsi = rsi[len - 1];
-  const currMacd = macdData.macd[len - 1];
-  const currMacdSignal = macdData.signal[len - 1];
   const currHist = macdData.histogram[len - 1];
   const prevHist = macdData.histogram[len - 2] || 0;
   const currAtr = atr[len - 1];
 
-  let score = 0;
   const reasons = [];
-
-  // 1. Trend Factor (EMA alignment)
-  let trendState = 'NEUTRAL';
-  if (currEma21 > currEma50 && currEma50 > currEma200) {
-    score += 2;
-    trendState = 'BULLISH';
-    reasons.push('EMA Alignment is Bullish (21 > 50 > 200)');
-  } else if (currEma21 < currEma50 && currEma50 < currEma200) {
-    score -= 2;
-    trendState = 'BEARISH';
-    reasons.push('EMA Alignment is Bearish (21 < 50 < 200)');
-  } else {
-    reasons.push('EMA Trend is Neutral / Consolidation');
-  }
-
-  // 2. Momentum Factor (RSI position)
-  if (currRsi > 50) {
-    score += 1;
-    reasons.push(`RSI is Bullish (${currRsi.toFixed(1)} > 50)`);
-    if (currRsi > 70) {
-      reasons.push('RSI Overbought Alert (> 70) — Watch for pullback');
-    }
-  } else if (currRsi < 50) {
-    score -= 1;
-    reasons.push(`RSI is Bearish (${currRsi.toFixed(1)} < 50)`);
-    if (currRsi < 30) {
-      reasons.push('RSI Oversold Alert (< 30) — Watch for recovery');
-    }
-  }
-
-  // 3. Trend Acceleration Factor (MACD)
-  if (currHist > 0) {
-    score += 1;
-    reasons.push('MACD histogram is Positive');
-    if (currHist > prevHist) {
-      score += 0.5;
-      reasons.push('MACD momentum is accelerating upwards');
-    }
-  } else if (currHist < 0) {
-    score -= 1;
-    reasons.push('MACD histogram is Negative');
-    if (currHist < prevHist) {
-      score -= 0.5;
-      reasons.push('MACD momentum is accelerating downwards');
-    }
-  }
-
-  // 4. Pullback / Value Zone Detection (Price vs EMA21 & EMA50)
-  if (trendState === 'BULLISH') {
-    // If price is pulling back into the EMA 21 - EMA 50 value pocket
-    if (currentPrice <= currEma21 && currentPrice >= currEma50) {
-      score += 1.5;
-      reasons.push('Price is inside the Bullish EMA value pocket (EMA21 - EMA50 pullback)');
-    }
-  } else if (trendState === 'BEARISH') {
-    if (currentPrice >= currEma21 && currentPrice <= currEma50) {
-      score -= 1.5;
-      reasons.push('Price is inside the Bearish EMA value pocket (EMA21 - EMA50 pullback)');
-    }
-  }
-
-  // 5. RSI Divergence Boost
-  if (divergence === 'BULLISH_DIVERGENCE') {
-    score += 2;
-    reasons.push('⚠️ BULLISH DIVERGENCE detected on RSI!');
-  } else if (divergence === 'BEARISH_DIVERGENCE') {
-    score -= 2;
-    reasons.push('⚠️ BEARISH DIVERGENCE detected on RSI!');
-  }
-
+  
   // ═══════════════════════════════════════════════════════════════
-  // 6. PRICE ACTION CONTEXT FILTERS (NEW)
+  // STEP 1: DETECT MULTI-TIMEFRAME PRICE ACTION
   // ═══════════════════════════════════════════════════════════════
   let priceActionReport = null;
-
   if (mtfData) {
     priceActionReport = analyzePriceAction(mtfData, currentPrice, currAtr);
-    const srMap = priceActionReport.srMap;
+  }
 
-    // 6a. S/R Proximity Penalty — don't buy at resistance, don't sell at support
-    if (srMap) {
-      if (srMap.nearestResistance && srMap.nearestResistance.distanceATR <= 0.5 && score > 0) {
-        const penalty = srMap.nearestResistance.distanceATR <= 0.3 ? 2.0 : 1.5;
-        score -= penalty;
-        reasons.push(`⚠️ S/R FILTER: Price within ${srMap.nearestResistance.distanceATR.toFixed(1)} ATR of ${srMap.nearestResistance.timeframe} RESISTANCE at $${srMap.nearestResistance.price.toFixed(2)} (${srMap.nearestResistance.touches} touches) — bullish score reduced by ${penalty}`);
-      }
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 2: TIER 1 — STRUCTURAL SETUPS (The Trade Triggers)
+  // ═══════════════════════════════════════════════════════════════
+  let tier1Score = 0;
+  let setupType = 'NONE';
+  let setupDetail = '';
 
-      if (srMap.nearestSupport && srMap.nearestSupport.distanceATR <= 0.5 && score < 0) {
-        const penalty = srMap.nearestSupport.distanceATR <= 0.3 ? 2.0 : 1.5;
-        score += penalty;
-        reasons.push(`⚠️ S/R FILTER: Price within ${Math.abs(srMap.nearestSupport.distanceATR).toFixed(1)} ATR of ${srMap.nearestSupport.timeframe} SUPPORT at $${srMap.nearestSupport.price.toFixed(2)} (${srMap.nearestSupport.touches} touches) — bearish score reduced by ${penalty}`);
-      }
-
-      // Multi-TF confluence zone — even stronger penalty
-      const criticals = srMap.dangerZone.criticalLevels;
-      if (criticals.length >= 2) {
-        const multiTF = criticals.some(l => l.timeframe === 'D1') || criticals.some(l => l.timeframe === 'H1');
-        if (multiTF) {
-          const extraPenalty = 1.0;
-          if (score > 0) score -= extraPenalty;
-          else if (score < 0) score += extraPenalty;
-          reasons.push(`⚠️ MULTI-TF S/R CONFLUENCE: Price at critical zone across multiple timeframes — additional score adjustment of ${extraPenalty}`);
-        }
-      }
+  const setups = [];
+  if (priceActionReport) {
+    // 1. Liquidity Sweep (+3.0) — M5 wick below H1 swing low, closed back above
+    if (priceActionReport.liquiditySweep && priceActionReport.liquiditySweep.detected) {
+      setups.push({
+        type: 'SWEEP',
+        score: 3.0,
+        detail: priceActionReport.liquiditySweep.description
+      });
     }
-
-    // 6b. Higher-Timeframe Trend Filter
-    const d1Structure = priceActionReport.timeframes.d1;
-    if (d1Structure && !d1Structure.error) {
-      if (d1Structure.trend === 'DOWNTREND' && score > 2.0) {
-        score = Math.min(score, 2.0);
-        reasons.push(`📊 D1 TREND FILTER: Daily trend is BEARISH — bullish score capped at 2.0 (D1: ${d1Structure.structureDescription})`);
-      } else if (d1Structure.trend === 'UPTREND' && score < -2.0) {
-        score = Math.max(score, -2.0);
-        reasons.push(`📊 D1 TREND FILTER: Daily trend is BULLISH — bearish score capped at -2.0 (D1: ${d1Structure.structureDescription})`);
-      }
+    // 2. FVG Fill at Support (+2.0) — price filled bullish imbalance near support
+    if (priceActionReport.fvgMap && priceActionReport.fvgMap.allBullishNearPrice.length > 0) {
+      const closestFVG = priceActionReport.fvgMap.allBullishNearPrice[0];
+      setups.push({
+        type: 'FVG_FILL',
+        score: 2.0,
+        detail: `Bullish FVG filled at $${closestFVG.bottom.toFixed(2)}-$${closestFVG.top.toFixed(2)} [${closestFVG.timeframe}]`
+      });
     }
-
-    // 6c. CHoCH Warning — if structure is changing character, be cautious
-    const currentTF = priceActionReport.timeframes.m30 || priceActionReport.timeframes.h1;
-    if (currentTF && currentTF.lastCHoCH) {
-      if (currentTF.lastCHoCH.type === 'BEARISH_CHOCH' && score > 0) {
-        score -= 1.5;
-        reasons.push(`⚠️ STRUCTURE WARNING: ${currentTF.label} shows Change of Character (bearish) — ${currentTF.lastCHoCH.description}`);
-      } else if (currentTF.lastCHoCH.type === 'BULLISH_CHOCH' && score < 0) {
-        score += 1.5;
-        reasons.push(`⚠️ STRUCTURE WARNING: ${currentTF.label} shows Change of Character (bullish) — ${currentTF.lastCHoCH.description}`);
-      }
+    // 3. Breakout Retest (+2.0) — H1 broke resistance, M5 pullback + rejection
+    if (priceActionReport.breakoutRetest && priceActionReport.breakoutRetest.detected) {
+      setups.push({
+        type: 'RETEST',
+        score: 2.0,
+        detail: priceActionReport.breakoutRetest.description
+      });
+    }
+    // 4. Re-accumulation (+1.5) — tight range/inside bars building energy near support
+    if (priceActionReport.reAccumulation && priceActionReport.reAccumulation.detected) {
+      setups.push({
+        type: 'REACCUM',
+        score: 1.5,
+        detail: priceActionReport.reAccumulation.description
+      });
     }
   }
 
-  // Determine final action badge
+  // Set the base score to the highest active setup to prevent double-counting
+  if (setups.length > 0) {
+    setups.sort((a, b) => b.score - a.score);
+    tier1Score = setups[0].score;
+    setupType = setups[0].type;
+    setupDetail = setups[0].detail;
+    reasons.push(`Tier 1 Setup Triggered: ${setupType} (+${tier1Score.toFixed(1)}) — ${setupDetail}`);
+  }
+
+  // 🔴 HARD GATE: Without a valid structural setup scoring >= 1.5, we output WAIT. Period.
+  if (tier1Score < 1.5) {
+    return {
+      signal: 'WAIT',
+      score: 0,
+      setupType: 'NONE',
+      reasons: ['WAIT: No structural triggers active. Strategy requires a Liquidity Sweep, FVG Fill, Retest, or Re-accumulation to take trade.'],
+      metrics: {
+        price: currentPrice,
+        ema21: currEma21,
+        ema50: currEma50,
+        ema200: currEma200,
+        rsi: currRsi,
+        macd: currHist,
+        atr: currAtr,
+        trend: currEma21 > currEma50 ? 'BULLISH' : 'BEARISH'
+      },
+      setup: null,
+      levels: keyLevels,
+      priceAction: priceActionReport
+    };
+  }
+
+  // Start with the base score
+  let score = tier1Score;
+
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 3: TIER 2 — CONFIRMATIONS (Only active because Tier 1 setup exists)
+  // ═══════════════════════════════════════════════════════════════
+  
+  // 1. Volume Spike Check (+1.5 for Spike, +0.75 for Elevated)
+  let volumeRatio = 1.0;
+  if (setupType === 'SWEEP' && priceActionReport.liquiditySweep && priceActionReport.liquiditySweep.volumeSpike) {
+    volumeRatio = priceActionReport.liquiditySweep.volumeSpike.ratio;
+  } else if (priceActionReport.volumeSpike) {
+    volumeRatio = priceActionReport.volumeSpike.ratio;
+  }
+
+  if (volumeRatio >= 2.0) {
+    score += 1.5;
+    reasons.push(`Tier 2 Confirm: Institutional Volume Spike confirmed (${volumeRatio}x avg volume) (+1.5)`);
+  } else if (volumeRatio >= 1.5) {
+    score += 0.75;
+    reasons.push(`Tier 2 Confirm: Elevated volume at setup (${volumeRatio}x avg volume) (+0.75)`);
+  }
+
+  // 2. Bullish Candlestick Pattern at structure (+1.0)
+  const m5Patterns = priceActionReport.timeframes.m5 ? priceActionReport.timeframes.m5.candlestickPatterns : [];
+  const hasBullishPattern = m5Patterns.some(p => p.bias === 'BULLISH');
+  if (hasBullishPattern) {
+    score += 1.0;
+    const patName = m5Patterns.find(p => p.bias === 'BULLISH').pattern;
+    reasons.push(`Tier 2 Confirm: Bullish ${patName} candle at setup zone (+1.0)`);
+  }
+
+  // 3. RSI Oversold at Structure (+1.0)
+  if (currRsi < 35) {
+    score += 1.0;
+    reasons.push(`Tier 2 Confirm: Rubber band stretched, RSI oversold at structure (${currRsi.toFixed(1)} < 35) (+1.0)`);
+  }
+
+  // 4. Bullish FVG coincides with sweep zone (+1.0)
+  if (setupType === 'SWEEP' && priceActionReport.liquiditySweep && priceActionReport.fvgMap) {
+    const sweepLevelPrice = priceActionReport.liquiditySweep.level.price;
+    const nearbyFVG = priceActionReport.fvgMap.allBullishNearPrice.find(g => Math.abs(g.midpoint - sweepLevelPrice) / currAtr < 0.5);
+    if (nearbyFVG) {
+      score += 1.0;
+      reasons.push(`Tier 2 Confirm: Bullish FVG zone aligns with liquidity sweep level (+1.0)`);
+    }
+  }
+
+  // 5. RSI Bullish Divergence (+1.0)
+  if (divergence === 'BULLISH_DIVERGENCE') {
+    score += 1.0;
+    reasons.push('Tier 2 Confirm: Bullish RSI Divergence suggests smart money absorption (+1.0)');
+  }
+
+  // 6. MACD Histogram Turning Upward (+0.5)
+  const macdTurning = currHist > prevHist && prevHist < 0;
+  if (macdTurning) {
+    score += 0.5;
+    reasons.push('Tier 2 Confirm: MACD sellers losing power, histogram turning upward (+0.5)');
+  }
+
+  // 7. Dynamic EMA Dynamic Support (+0.5)
+  if (currentPrice <= currEma21 && currentPrice >= currEma50 && currEma21 > currEma50) {
+    score += 0.5;
+    reasons.push('Tier 2 Confirm: Price bouncing off EMA 21/50 value pocket (+0.5)');
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 4: TIER 3 — FILTERS & PENALTIES (Block/reduce risk on bad trades)
+  // ═══════════════════════════════════════════════════════════════
+  const srMap = priceActionReport.srMap;
+
+  // 1. Proximity to H1/D1 Resistance (-2.0)
+  if (srMap && srMap.nearestResistance && srMap.nearestResistance.distanceATR <= 0.5) {
+    score -= 2.0;
+    reasons.push(`Tier 3 Filter: Buying directly into Resistance Zone at $${srMap.nearestResistance.price} (${srMap.nearestResistance.distanceATR.toFixed(1)} ATR away) (-2.0)`);
+  }
+
+  // 2. RSI Overbought Protection (-1.5)
+  if (currRsi > 70) {
+    score -= 1.5;
+    reasons.push(`Tier 3 Filter: RSI is already Overbought (${currRsi.toFixed(1)} > 70) — do not chase here (-1.5)`);
+  }
+
+  // 3. Multi-TF Overhead Resistance Confluence (-1.0)
+  if (srMap && srMap.dangerZone.criticalLevels.length >= 2) {
+    const hasHighTF = srMap.dangerZone.criticalLevels.some(l => l.timeframe === 'D1' || l.timeframe === 'H1');
+    if (hasHighTF) {
+      score -= 1.0;
+      reasons.push('Tier 3 Filter: Heavy overhead supply confluences detected on high timeframes (-1.0)');
+    }
+  }
+
+  // 4. Daily Trend Filter (Cap total score at 2.0 if D1 structure is bearish)
+  let capApplied = false;
+  const d1Structure = priceActionReport.timeframes.d1;
+  if (d1Structure && !d1Structure.error && d1Structure.trend === 'DOWNTREND') {
+    capApplied = true;
+  }
+
+  if (capApplied && score > 2.0) {
+    score = 2.0;
+    reasons.push(`📊 Tier 3 Filter: D1 structure is BEARISH — final score capped at 2.0 to prevent counter-trend risk`);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 5: VERDICT BADGE
+  // ═══════════════════════════════════════════════════════════════
   let finalSignal = 'WAIT';
-  if (score >= 3.5) {
+  if (score >= 4.0) {
     finalSignal = 'STRONG BUY';
-  } else if (score >= 1.5) {
+  } else if (score >= 2.5) {
     finalSignal = 'BUY';
-  } else if (score <= -3.5) {
-    finalSignal = 'STRONG SELL';
-  } else if (score <= -1.5) {
-    finalSignal = 'SELL';
   }
 
-  // Dynamic Stop Loss and Take Profit levels based on ATR
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 6: STRUCTURAL SL & TP CALCULATION
+  // ═══════════════════════════════════════════════════════════════
   let suggestedSL = null;
   let suggestedTP = null;
   let riskRewardRatio = 0;
 
-  if (currAtr) {
-    const slMultiplier = 1.5;
-    const tpMultiplier = 3.0; // Optimized R:R 1:2 standard target
-    const atrDistance = currAtr * slMultiplier;
-    
-    if (finalSignal.includes('BUY')) {
-      suggestedSL = parseFloat((currentPrice - atrDistance).toFixed(2));
-      suggestedTP = parseFloat((currentPrice + (currAtr * tpMultiplier)).toFixed(2));
-      riskRewardRatio = parseFloat((tpMultiplier / slMultiplier).toFixed(2));
-    } else if (finalSignal.includes('SELL')) {
-      suggestedSL = parseFloat((currentPrice + atrDistance).toFixed(2));
-      suggestedTP = parseFloat((currentPrice - (currAtr * tpMultiplier)).toFixed(2));
-      riskRewardRatio = parseFloat((tpMultiplier / slMultiplier).toFixed(2));
+  if (finalSignal.includes('BUY')) {
+    let slPrice = null;
+    let tpPrice = null;
+
+    // SL goes below the structural low buffer of the trap candle
+    if (setupType === 'SWEEP' && priceActionReport.liquiditySweep && priceActionReport.liquiditySweep.sweepCandle) {
+      const sweepLow = priceActionReport.liquiditySweep.sweepCandle.low;
+      slPrice = sweepLow - (currAtr * 0.5); // 0.5 ATR buffer below sweep low
+    } else if (setupType === 'RETEST' && priceActionReport.breakoutRetest && priceActionReport.breakoutRetest.retestCandle) {
+      const retestLow = priceActionReport.breakoutRetest.retestCandle.low;
+      slPrice = retestLow - (currAtr * 0.5);
+    } else {
+      // Fallback to nearest major support level
+      if (srMap && srMap.nearestSupport) {
+        slPrice = srMap.nearestSupport.price - (currAtr * 0.5);
+      } else {
+        slPrice = currentPrice - (currAtr * 1.5);
+      }
     }
+
+    // TP goes at the nearest structural H1 resistance level
+    if (srMap && srMap.levels) {
+      const h1Resistances = srMap.levels.filter(l => l.type === 'resistance' && l.timeframe === 'H1' && l.price > currentPrice);
+      if (h1Resistances.length > 0) {
+        // Use the closest H1 resistance
+        tpPrice = h1Resistances[0].price;
+      }
+    }
+
+    // Fallback TP if no H1 resistance is found or it's too close (less than 2 ATR)
+    const minTpDistance = currAtr * 2.0;
+    if (!tpPrice || (tpPrice - currentPrice) < minTpDistance) {
+      tpPrice = currentPrice + (currAtr * 3.0); // Default 1:2 standard R:R
+    }
+
+    suggestedSL = parseFloat(slPrice.toFixed(2));
+    suggestedTP = parseFloat(tpPrice.toFixed(2));
+    
+    const riskAmount = currentPrice - suggestedSL;
+    const rewardAmount = suggestedTP - currentPrice;
+    riskRewardRatio = riskAmount > 0 ? parseFloat((rewardAmount / riskAmount).toFixed(2)) : 0;
   }
 
   return {
     signal: finalSignal,
     score: score,
+    setupType: setupType,
     reasons: reasons,
     metrics: {
       price: currentPrice,
@@ -230,12 +314,9 @@ export function generateSignals(ohlcv, mtfData = null) {
       ema50: currEma50,
       ema200: currEma200,
       rsi: currRsi,
-      macd: currMacd,
-      macdSignal: currMacdSignal,
-      histogram: currHist,
+      macd: currHist,
       atr: currAtr,
-      divergence: divergence,
-      trend: trendState
+      trend: currEma21 > currEma50 ? 'BULLISH' : 'BEARISH'
     },
     setup: suggestedSL ? {
       entry: parseFloat(currentPrice.toFixed(2)),

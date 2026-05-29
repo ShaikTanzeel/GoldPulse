@@ -1,10 +1,10 @@
 //+------------------------------------------------------------------+
 //|                                                 GoldPulse_EA.mq5 |
-//|        Enhanced with Price Action Filters & Multi-TF Context     |
+//|        Liquidity Sweep / Buy-the-Dip Long-Only Trading Robot      |
 //+------------------------------------------------------------------+
 #property copyright "GoldPulse"
 #property link      ""
-#property version   "2.00"
+#property version   "3.00"
 
 #include <Trade\Trade.mqh>
 
@@ -21,7 +21,7 @@ int rsi_handle;
 int macd_handle;
 int atr_handle;
 
-// Higher-timeframe handles for D1 trend filter
+// Higher-timeframe handles for Daily (D1) filter
 int d1_ema21_handle;
 int d1_ema50_handle;
 
@@ -30,9 +30,9 @@ int d1_ema50_handle;
 //+------------------------------------------------------------------+
 int OnInit()
   {
-   trade.SetExpertMagicNumber(InpMagicNumber);
+   trade.SetMagicNumber(InpMagicNumber);
    
-   // Current timeframe indicators
+   // Current timeframe indicators (M5)
    ema21_handle = iMA(_Symbol, _Period, 21, 0, MODE_EMA, PRICE_CLOSE);
    ema50_handle = iMA(_Symbol, _Period, 50, 0, MODE_EMA, PRICE_CLOSE);
    ema200_handle = iMA(_Symbol, _Period, 200, 0, MODE_EMA, PRICE_CLOSE);
@@ -40,7 +40,7 @@ int OnInit()
    macd_handle = iMACD(_Symbol, _Period, 12, 26, 9, PRICE_CLOSE);
    atr_handle = iATR(_Symbol, _Period, 14);
    
-   // Daily timeframe EMAs for higher-TF trend filter
+   // Daily timeframe EMAs for structural trend filter
    d1_ema21_handle = iMA(_Symbol, PERIOD_D1, 21, 0, MODE_EMA, PRICE_CLOSE);
    d1_ema50_handle = iMA(_Symbol, PERIOD_D1, 50, 0, MODE_EMA, PRICE_CLOSE);
    
@@ -141,23 +141,16 @@ CANDLE_PATTERN DetectCandlePattern(int shift)
 
 //+------------------------------------------------------------------+
 //| Multi-TF Support/Resistance Proximity Check                      |
-//| Checks if price is near a swing high/low on D1 or H1             |
 //+------------------------------------------------------------------+
 bool IsNearResistance(double price, double atr, int swingLookback = 20)
 {
-   // Check D1 swing highs and lows above price
    for(int i = 1; i <= swingLookback; i++)
    {
       double d1High = iHigh(_Symbol, PERIOD_D1, i);
       if(d1High > price && d1High - price <= atr * 0.5)
          return true;
-         
-      double d1Low = iLow(_Symbol, PERIOD_D1, i);
-      if(d1Low > price && d1Low - price <= atr * 0.5)
-         return true;
    }
    
-   // Check H1 swing highs and lows above price
    for(int i = 2; i <= swingLookback * 3; i++)
    {
       double h1High = iHigh(_Symbol, PERIOD_H1, i);
@@ -168,57 +161,189 @@ bool IsNearResistance(double price, double atr, int swingLookback = 20)
          if(h1High > price && h1High - price <= atr * 0.5)
             return true;
       }
-      
-      double h1Low = iLow(_Symbol, PERIOD_H1, i);
-      double prevL = iLow(_Symbol, PERIOD_H1, i-1);
-      double nextL = iLow(_Symbol, PERIOD_H1, i+1);
-      if(h1Low < prevL && h1Low < nextL) // Swing low
-      {
-         if(h1Low > price && h1Low - price <= atr * 0.5)
-            return true;
-      }
    }
-   
    return false;
 }
 
-bool IsNearSupport(double price, double atr, int swingLookback = 20)
+//+------------------------------------------------------------------+
+//| STRATEGY SETUP: Liquidity Sweep Detection (Entry: M5, Struct: H1) |
+//+------------------------------------------------------------------+
+bool DetectLiquiditySweep(double &sweepLevel, double &sweepLowPrice)
 {
-   // Check D1 swing highs and lows below price
-   for(int i = 1; i <= swingLookback; i++)
+   if(_Period >= PERIOD_H1) return false;
+
+   // 1. Scan H1 bars (completed index 2 to 40) to find structural swing lows
+   double swingLows[10];
+   int swingCount = 0;
+   ArrayInitialize(swingLows, 0);
+
+   for(int i = 2; i < 40 && swingCount < 10; i++)
    {
-      double d1High = iHigh(_Symbol, PERIOD_D1, i);
-      if(d1High < price && price - d1High <= atr * 0.5)
-         return true;
-         
-      double d1Low = iLow(_Symbol, PERIOD_D1, i);
-      if(d1Low < price && price - d1Low <= atr * 0.5)
-         return true;
-   }
-   
-   // Check H1 swing highs and lows below price
-   for(int i = 2; i <= swingLookback * 3; i++)
-   {
-      double h1High = iHigh(_Symbol, PERIOD_H1, i);
-      double prevH = iHigh(_Symbol, PERIOD_H1, i-1);
-      double nextH = iHigh(_Symbol, PERIOD_H1, i+1);
-      if(h1High > prevH && h1High > nextH) // Swing high
+      double low  = iLow(_Symbol, PERIOD_H1, i);
+      double prev = iLow(_Symbol, PERIOD_H1, i-1);
+      double next = iLow(_Symbol, PERIOD_H1, i+1);
+      double prev2 = iLow(_Symbol, PERIOD_H1, i-2);
+      double next2 = iLow(_Symbol, PERIOD_H1, i+2);
+
+      if(low < prev && low < next && low < prev2 && low < next2) // Strong swing low
       {
-         if(h1High < price && price - h1High <= atr * 0.5)
-            return true;
-      }
-      
-      double h1Low = iLow(_Symbol, PERIOD_H1, i);
-      double prevL = iLow(_Symbol, PERIOD_H1, i-1);
-      double nextL = iLow(_Symbol, PERIOD_H1, i+1);
-      if(h1Low < prevL && h1Low < nextL) // Swing low
-      {
-         if(h1Low < price && price - h1Low <= atr * 0.5)
-            return true;
+         swingLows[swingCount] = low;
+         swingCount++;
       }
    }
-   
+
+   if(swingCount == 0) return false;
+
+   // 2. Scan the last 5 completed M5 candles (shift 1 to 5) for sweep/trap activity
+   double atr[1];
+   if(CopyBuffer(atr_handle, 0, 1, 1, atr) <= 0) return false;
+   double currAtr = atr[0];
+
+   for(int i = 1; i <= 5; i++)
+   {
+      double m5Low   = iLow(_Symbol, _Period, i);
+      double m5Close = iClose(_Symbol, _Period, i);
+
+      for(int j = 0; j < swingCount; j++)
+      {
+         double level = swingLows[j];
+         // Wick dipped below structural low
+         if(m5Low < level)
+         {
+            double sweepDepth = level - m5Low;
+            
+            // Wick swept, but close returned back inside/above structural support
+            bool closedAbove = m5Close > level;
+            bool nextRecovered = false;
+            
+            // Check delayed recovery (next candle closed back above)
+            if(!closedAbove && i > 1)
+            {
+               double prevClose = iClose(_Symbol, _Period, i-1);
+               if(prevClose > level) nextRecovered = true;
+            }
+
+            // Exclude extreme breakdowns (sweeps deeper than 1.2 ATR are breakouts/legit drops)
+            if((closedAbove || nextRecovered) && sweepDepth < currAtr * 1.2 && sweepDepth > 0)
+            {
+               sweepLevel = level;
+               sweepLowPrice = m5Low;
+               return true;
+            }
+         }
+      }
+   }
    return false;
+}
+
+//+------------------------------------------------------------------+
+//| STRATEGY SETUP: Bullish Fair Value Gap (FVG) Detection            |
+//+------------------------------------------------------------------+
+bool DetectBullishFVG(double &fvgBottom, double &fvgTop)
+{
+   // Bullish FVG: Low of bar i > High of bar i+2
+   for(int i = 1; i <= 10; i++)
+   {
+      double high2 = iHigh(_Symbol, _Period, i+2);
+      double low0  = iLow(_Symbol, _Period, i);
+      
+      if(low0 > high2)
+      {
+         fvgBottom = high2;
+         fvgTop = low0;
+         
+         // Verify price is approaching or currently inside the imbalance gap
+         double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+         if(bid <= fvgTop && bid >= fvgBottom - 1.5)
+         {
+            return true;
+         }
+      }
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| STRATEGY SETUP: Breakout-Retest Detection                       |
+//+------------------------------------------------------------------+
+bool DetectBreakoutRetest(double &retestLevel)
+{
+   if(_Period >= PERIOD_H1) return false;
+
+   // 1. Scan H1 bars for swing highs
+   double swingHighs[5];
+   int shCount = 0;
+   ArrayInitialize(swingHighs, 0);
+
+   for(int i = 2; i < 30 && shCount < 5; i++)
+   {
+      double high = iHigh(_Symbol, PERIOD_H1, i);
+      double prev = iHigh(_Symbol, PERIOD_H1, i-1);
+      double next = iHigh(_Symbol, PERIOD_H1, i+1);
+
+      if(high > prev && high > next)
+      {
+         swingHighs[shCount] = high;
+         shCount++;
+      }
+   }
+
+   if(shCount == 0) return false;
+
+   // 2. Check if a recent H1 candle broke above one of them
+   double brokenHigh = 0;
+   for(int i = 1; i <= 5; i++)
+   {
+      double h1Close = iClose(_Symbol, PERIOD_H1, i);
+      double h1Open  = iOpen(_Symbol, PERIOD_H1, i);
+      for(int j = 0; j < shCount; j++)
+      {
+         if(h1Close > swingHighs[j] && h1Open <= swingHighs[j])
+         {
+            brokenHigh = swingHighs[j];
+            break;
+         }
+      }
+      if(brokenHigh > 0) break;
+   }
+
+   if(brokenHigh == 0) return false;
+
+   // 3. Check if any recent M5 candles touched the broken level
+   for(int i = 1; i <= 10; i++)
+   {
+      double m5Low  = iLow(_Symbol, _Period, i);
+      double m5High = iHigh(_Symbol, _Period, i);
+
+      if(m5Low <= brokenHigh + 0.5 && m5High >= brokenHigh - 0.5)
+      {
+         retestLevel = brokenHigh;
+         return true;
+      }
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| CONFIRMATION: Volume Spike Verification                          |
+//+------------------------------------------------------------------+
+bool CheckVolumeSpike(int shift, double &ratio)
+{
+   long volume[21];
+   if(CopyTickVolume(_Symbol, _Period, shift, 21, volume) <= 0) return false;
+
+   long targetVolume = volume[20];
+   long sum = 0;
+   for(int i = 0; i < 20; i++)
+   {
+      sum += volume[i];
+   }
+   
+   double avg = (double)sum / 20.0;
+   if(avg <= 0) return false;
+
+   ratio = (double)targetVolume / avg;
+   return (ratio >= 1.5);
 }
 
 //+------------------------------------------------------------------+
@@ -226,201 +351,178 @@ bool IsNearSupport(double price, double atr, int swingLookback = 20)
 //+------------------------------------------------------------------+
 void OnTick()
   {
-   // Execute on bar close only
+   // On Bar Close logic
    static datetime last_bar_time;
    datetime current_bar_time = (datetime)SeriesInfoInteger(_Symbol, _Period, SERIES_LASTBAR_DATE);
    if(last_bar_time == current_bar_time) return;
    
-   // Data arrays
-   double ema21[1], ema50[1], ema200[1];
+   // Copy indicator data
    double atr[1];
    double macd_main[2], macd_signal[2];
+   double rsi[1];
    
-   int count = InpLookback + 1;
-   double rsi[];
-   double close[];
-   ArrayResize(rsi, count);
-   ArrayResize(close, count);
-   
-   // Copy indicator data (Shift 1 means completed bar)
-   if(CopyBuffer(ema21_handle, 0, 1, 1, ema21) <= 0) return;
-   if(CopyBuffer(ema50_handle, 0, 1, 1, ema50) <= 0) return;
-   if(CopyBuffer(ema200_handle, 0, 1, 1, ema200) <= 0) return;
    if(CopyBuffer(atr_handle, 0, 1, 1, atr) <= 0) return;
    if(CopyBuffer(macd_handle, 0, 1, 2, macd_main) <= 0) return;
    if(CopyBuffer(macd_handle, 1, 1, 2, macd_signal) <= 0) return;
-   if(CopyBuffer(rsi_handle, 0, 1, count, rsi) <= 0) return;
-   if(CopyClose(_Symbol, _Period, 1, count, close) <= 0) return;
+   if(CopyBuffer(rsi_handle, 0, 1, 1, rsi) <= 0) return;
    
-   // Daily EMAs for higher-timeframe trend filter
-   double d1Ema21[1], d1Ema50[1];
-   if(CopyBuffer(d1_ema21_handle, 0, 0, 1, d1Ema21) <= 0) return;
-   if(CopyBuffer(d1_ema50_handle, 0, 0, 1, d1Ema50) <= 0) return;
-   
-   // Set references
-   double currEma21 = ema21[0];
-   double currEma50 = ema50[0];
-   double currEma200 = ema200[0];
    double currAtr = atr[0];
-   
    double currHist = macd_main[1] - macd_signal[1];
    double prevHist = macd_main[0] - macd_signal[0];
+   double currRsi = rsi[0];
    
-   double currRsi = rsi[count - 1];
-   double prevRsi = rsi[0];
-   
-   double currentPrice = close[count - 1];
-   double pastPrice = close[0];
+   double currentPrice = iClose(_Symbol, _Period, 1);
    
    double score = 0;
+   string setupType = "NONE";
+   double sweepLevel = 0, sweepLow = 0;
+   double fvgBottom = 0, fvgTop = 0;
+   double retestLevel = 0;
    
    // ═══════════════════════════════════════════════════════════
-   // INDICATOR-BASED SCORING (same as before)
+   // STEP 1: TIER 1 STRUCTURAL SETUP TRIGGERS
    // ═══════════════════════════════════════════════════════════
    
-   // 1. Trend Factor
-   string trendState = "NEUTRAL";
-   if (currEma21 > currEma50 && currEma50 > currEma200) {
-      score += 2.0;
-      trendState = "BULLISH";
-   } else if (currEma21 < currEma50 && currEma50 < currEma200) {
-      score -= 2.0;
-      trendState = "BEARISH";
+   if(DetectLiquiditySweep(sweepLevel, sweepLow))
+   {
+      score = 3.0;
+      setupType = "SWEEP";
+   }
+   else if(DetectBullishFVG(fvgBottom, fvgTop))
+   {
+      score = 2.0;
+      setupType = "FVG_FILL";
+   }
+   else if(DetectBreakoutRetest(retestLevel))
+   {
+      score = 2.0;
+      setupType = "RETEST";
    }
    
-   // 2. Momentum Factor
-   if (currRsi > 50.0) {
+   // 🔴 HARD GATE: Without structural triggers, we stand aside.
+   if(score < 1.5)
+   {
+      return;
+   }
+   
+   // ═══════════════════════════════════════════════════════════
+   // STEP 2: TIER 2 CONFIRMATIONS
+   // ═══════════════════════════════════════════════════════════
+   
+   // 1. Volume spike confirmation
+   double volRatio = 1.0;
+   if(CheckVolumeSpike(1, volRatio))
+   {
+      if(volRatio >= 2.0) score += 1.5;
+      else score += 0.75;
+   }
+   
+   // 2. Bullish Candlestick Pattern at structure
+   CANDLE_PATTERN pattern = DetectCandlePattern(1);
+   if(pattern == PATTERN_PIN_BAR_BULL || pattern == PATTERN_ENGULFING_BULL)
+   {
       score += 1.0;
-   } else if (currRsi < 50.0) {
-      score -= 1.0;
    }
    
-   // 3. Trend Acceleration Factor
-   if (currHist > 0) {
+   // 3. RSI Oversold
+   if(currRsi < 35.0)
+   {
       score += 1.0;
-      if (currHist > prevHist) score += 0.5;
-   } else if (currHist < 0) {
-      score -= 1.0;
-      if (currHist < prevHist) score -= 0.5;
    }
    
-   // 4. Pullback / Value Zone Detection
-   if (trendState == "BULLISH") {
-      if (currentPrice <= currEma21 && currentPrice >= currEma50) {
-         score += 1.5;
-      }
-   } else if (trendState == "BEARISH") {
-      if (currentPrice >= currEma21 && currentPrice <= currEma50) {
-         score -= 1.5;
-      }
+   // 4. MACD Shift
+   if(currHist > prevHist && prevHist < 0)
+   {
+      score += 0.5;
    }
    
-   // 5. Divergence Boost
-   bool isLowerLowPrice = currentPrice < pastPrice;
-   bool isHigherLowRsi = currRsi > prevRsi && currRsi < 35.0;
-   if (isLowerLowPrice && isHigherLowRsi) {
-      score += 2.0;
-   }
+   // ═══════════════════════════════════════════════════════════
+   // STEP 3: TIER 3 FILTERS & PENALTIES
+   // ═══════════════════════════════════════════════════════════
    
-   bool isHigherHighPrice = currentPrice > pastPrice;
-   bool isLowerHighRsi = currRsi < prevRsi && currRsi > 65.0;
-   if (isHigherHighPrice && isLowerHighRsi) {
+   // 1. Proximity to major resistance
+   if(IsNearResistance(currentPrice, currAtr))
+   {
       score -= 2.0;
    }
    
-   // ═══════════════════════════════════════════════════════════
-   // PRICE ACTION FILTERS (NEW)
-   // ═══════════════════════════════════════════════════════════
-   
-   // 6a. S/R Proximity Gate — don't buy near resistance, don't sell near support
-   if (score > 0 && IsNearResistance(currentPrice, currAtr)) {
-      double penalty = 2.0;
-      score -= penalty;
-      Print("PA FILTER: Bullish score reduced by ", penalty, " — price near D1/H1 resistance");
+   // 2. Overbought RSI Protection
+   if(currRsi > 70.0)
+   {
+      score -= 1.5;
    }
    
-   if (score < 0 && IsNearSupport(currentPrice, currAtr)) {
-      double penalty = 2.0;
-      score += penalty;
-      Print("PA FILTER: Bearish score reduced by ", penalty, " — price near D1/H1 support");
-   }
-   
-   // 6b. Daily Trend Filter — don't go against D1 trend
-   bool d1Bullish = d1Ema21[0] > d1Ema50[0];
-   bool d1Bearish = d1Ema21[0] < d1Ema50[0];
-   
-   if (d1Bearish && score > 2.0) {
-      score = MathMin(score, 2.0);
-      Print("PA FILTER: D1 bearish — bullish score capped at 2.0");
-   } else if (d1Bullish && score < -2.0) {
-      score = MathMax(score, -2.0);
-      Print("PA FILTER: D1 bullish — bearish score capped at -2.0");
-   }
-   
-   // 6c. Candlestick Confirmation — boost score if candle confirms direction
-   CANDLE_PATTERN pattern = DetectCandlePattern(1); // Check completed bar
-   
-   if (pattern == PATTERN_PIN_BAR_BULL && score > 0) {
-      score += 0.5;
-      Print("PA BOOST: Bullish pin bar confirms buy setup");
-   } else if (pattern == PATTERN_PIN_BAR_BEAR && score < 0) {
-      score -= 0.5;
-      Print("PA BOOST: Bearish pin bar confirms sell setup");
-   } else if (pattern == PATTERN_ENGULFING_BULL && score > 0) {
-      score += 0.5;
-      Print("PA BOOST: Bullish engulfing confirms buy setup");
-   } else if (pattern == PATTERN_ENGULFING_BEAR && score < 0) {
-      score -= 0.5;
-      Print("PA BOOST: Bearish engulfing confirms sell setup");
-   }
-   
-   // Warn if doji at key level
-   if (pattern == PATTERN_DOJI) {
-      Print("PA WARNING: Doji detected — indecision candle, be cautious");
+   // 3. Daily trend filter
+   double d1Ema21[1], d1Ema50[1];
+   if(CopyBuffer(d1_ema21_handle, 0, 0, 1, d1Ema21) > 0 && CopyBuffer(d1_ema50_handle, 0, 0, 1, d1Ema50) > 0)
+   {
+      bool d1Bearish = d1Ema21[0] < d1Ema50[0];
+      if(d1Bearish && score > 2.0)
+      {
+         score = 2.0; // Cap score to prevent counter daily trend risk
+      }
    }
    
    // ═══════════════════════════════════════════════════════════
-   // FINAL SIGNAL & EXECUTION
+   // VERDICT & EXECUTION (LONG-ONLY BUY ENGINE)
    // ═══════════════════════════════════════════════════════════
    
    string finalSignal = "WAIT";
-   if (score >= 3.5) {
-      finalSignal = "STRONG BUY";
-   } else if (score >= 1.5) {
-      finalSignal = "BUY";
-   } else if (score <= -3.5) {
-      finalSignal = "STRONG SELL";
-   } else if (score <= -1.5) {
-      finalSignal = "SELL";
-   }
+   if(score >= 4.0) finalSignal = "STRONG BUY";
+   else if(score >= 2.5) finalSignal = "BUY";
    
-   Print("GoldPulse v2 | Score: ", score, " | Signal: ", finalSignal, 
-         " | Trend: ", trendState, " | D1: ", d1Bullish ? "Bull" : (d1Bearish ? "Bear" : "Neutral"),
-         " | Pattern: ", EnumToString(pattern));
+   Print("GoldPulse EA | Score: ", score, " | Verdict: ", finalSignal, " | Setup: ", setupType);
    
-   // Execution Logic
-   if (PositionsTotal() > 0) return;
+   // Check active positions (only one active position allowed at once)
+   if(PositionsTotal() > 0) return;
    
-   if (finalSignal == "BUY" || finalSignal == "STRONG BUY") {
-      double sl = currentPrice - (currAtr * 1.5);
-      double tp = currentPrice + (currAtr * 3.0);
+   if(finalSignal == "BUY" || finalSignal == "STRONG BUY")
+   {
+      double sl = 0;
+      double tp = 0;
+      
+      // Calculate structural stop loss
+      if(setupType == "SWEEP")
+      {
+         sl = sweepLow - (currAtr * 0.5); // stop goes 0.5 ATR below sweep wick
+      }
+      else if(setupType == "RETEST")
+      {
+         sl = retestLevel - (currAtr * 0.5);
+      }
+      else
+      {
+         sl = currentPrice - (currAtr * 1.5);
+      }
+      
+      // Calculate structural H1 resistance target
+      double nearestH1Res = 0;
+      for(int i = 2; i < 60; i++)
+      {
+         double high = iHigh(_Symbol, PERIOD_H1, i);
+         double prevH = iHigh(_Symbol, PERIOD_H1, i-1);
+         double nextH = iHigh(_Symbol, PERIOD_H1, i+1);
+         if(high > prevH && high > nextH && high > currentPrice)
+         {
+            nearestH1Res = high;
+            break;
+         }
+      }
+      
+      if(nearestH1Res > 0 && (nearestH1Res - currentPrice) > (currAtr * 2.0))
+      {
+         tp = nearestH1Res;
+      }
+      else
+      {
+         tp = currentPrice + (currAtr * 3.0); // standard 1:2 R:R fallback
+      }
       
       sl = NormalizeDouble(sl, _Digits);
       tp = NormalizeDouble(tp, _Digits);
       
       double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-      trade.Buy(InpLotSize, _Symbol, ask, sl, tp, "GoldPulse v2 Buy");
-      last_bar_time = current_bar_time;
-   } 
-   else if (finalSignal == "SELL" || finalSignal == "STRONG SELL") {
-      double sl = currentPrice + (currAtr * 1.5);
-      double tp = currentPrice - (currAtr * 3.0);
-      
-      sl = NormalizeDouble(sl, _Digits);
-      tp = NormalizeDouble(tp, _Digits);
-      
-      double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-      trade.Sell(InpLotSize, _Symbol, bid, sl, tp, "GoldPulse v2 Sell");
+      trade.Buy(InpLotSize, _Symbol, ask, sl, tp, "GoldPulse Sweep Buy");
       last_bar_time = current_bar_time;
    }
   }
