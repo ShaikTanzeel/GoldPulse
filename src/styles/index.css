@@ -1,16 +1,16 @@
 /* GoldPulse Design System & Premium UI Theme */
 
 :root {
-  /* Harmonious Dark & Gold Color Palette */
-  --bg-primary: #050508;
-  --bg-secondary: #0b0c10;
-  --bg-tertiary: #12131a;
-  --bg-glass: rgba(18, 19, 26, 0.7);
-  --bg-glass-hover: rgba(28, 29, 38, 0.8);
-  --border-glass: rgba(212, 175, 55, 0.15);
-  --border-glass-active: rgba(212, 175, 55, 0.4);
+  /* Institutional Deep Space Slate & Gunmetal Color Palette */
+  --bg-primary: #020204;
+  --bg-secondary: #0c0e14;
+  --bg-tertiary: #11141c;
+  --bg-glass: rgba(12, 14, 20, 0.75);
+  --bg-glass-hover: rgba(17, 20, 28, 0.85);
+  --border-glass: rgba(255, 255, 255, 0.06); /* Hairline light-refracting outline */
+  --border-glass-active: rgba(212, 175, 55, 0.3); /* Brushed gold active outline */
   
-  /* Primary Accent: Metallic Gold & Amber Gradients */
+  /* Primary Accent: Brushed Metallic Gold & Premium Gradients */
   --gold-metallic: #d4af37;
   --gold-light: #f3e5ab;
   --gold-dark: #aa7c11;
@@ -19,31 +19,31 @@
   
   /* Semantic Status Colors */
   --color-buy: #00e676;
-  --color-buy-bg: rgba(0, 230, 118, 0.1);
+  --color-buy-bg: rgba(0, 230, 118, 0.08);
   --color-sell: #ff1744;
-  --color-sell-bg: rgba(255, 23, 68, 0.1);
-  --color-neutral: #8892b0;
-  --color-neutral-bg: rgba(136, 146, 176, 0.1);
+  --color-sell-bg: rgba(255, 23, 68, 0.08);
+  --color-neutral: #78909c;
+  --color-neutral-bg: rgba(120, 144, 156, 0.08);
   --color-info: #00b0ff;
   
-  /* Neutral Typography Colors */
-  --text-primary: #f8f9fa;
-  --text-secondary: #a0aec0;
-  --text-muted: #64748b;
+  /* Typography Colors */
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #475569;
   
   /* Shadow Systems */
-  --shadow-gold: 0 8px 32px 0 rgba(212, 175, 55, 0.15);
-  --shadow-card: 0 4px 20px 0 rgba(0, 0, 0, 0.5);
-  --shadow-inset: inset 0 2px 4px 0 rgba(0, 0, 0, 0.6);
+  --shadow-gold: 0 8px 32px 0 rgba(212, 175, 55, 0.08);
+  --shadow-card: 0 8px 30px 0 rgba(0, 0, 0, 0.7);
+  --shadow-inset: inset 0 2px 4px 0 rgba(0, 0, 0, 0.8);
   
   /* Font Families */
   --font-sans: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   
   /* Transitions */
-  --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 * {

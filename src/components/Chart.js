@@ -26,14 +26,14 @@ export class GoldPulseChart {
 
     const chartOptions = {
       layout: {
-        background: { type: 'solid', color: '#0b0c10' },
-        textColor: '#a0aec0',
+        background: { type: 'solid', color: '#0c0e14' },
+        textColor: '#94a3b8',
         fontSize: 12,
         fontFamily: "'JetBrains Mono', monospace",
       },
       grid: {
-        vertLines: { color: 'rgba(212, 175, 55, 0.04)' },
-        horzLines: { color: 'rgba(212, 175, 55, 0.04)' },
+        vertLines: { color: 'rgba(212, 175, 55, 0.03)' },
+        horzLines: { color: 'rgba(212, 175, 55, 0.03)' },
       },
       crosshair: {
         mode: 1, // Magnet mode
@@ -51,12 +51,12 @@ export class GoldPulseChart {
         },
       },
       rightPriceScale: {
-        borderColor: 'rgba(212, 175, 55, 0.15)',
+        borderColor: 'rgba(255, 255, 255, 0.06)',
         visible: true,
         autoScale: true,
       },
       timeScale: {
-        borderColor: 'rgba(212, 175, 55, 0.15)',
+        borderColor: 'rgba(255, 255, 255, 0.06)',
         timeVisible: true,
         secondsVisible: false,
       },
@@ -67,7 +67,7 @@ export class GoldPulseChart {
         visible: true,
         fontSize: 24,
         fontWeight: 'bold',
-        color: 'rgba(212, 175, 55, 0.05)',
+        color: 'rgba(212, 175, 55, 0.04)',
         text: 'GoldPulse XAUUSD',
       }
     };
@@ -257,22 +257,22 @@ export class GoldPulseChart {
           width: 800,
           height: 450,
           layout: {
-            background: { type: 'solid', color: '#0b0c10' },
-            textColor: '#a0aec0',
+            background: { type: 'solid', color: '#0c0e14' },
+            textColor: '#94a3b8',
             fontSize: 11,
             fontFamily: "'JetBrains Mono', monospace",
           },
           grid: {
-            vertLines: { color: 'rgba(212, 175, 55, 0.04)' },
-            horzLines: { color: 'rgba(212, 175, 55, 0.04)' },
+            vertLines: { color: 'rgba(212, 175, 55, 0.03)' },
+            horzLines: { color: 'rgba(212, 175, 55, 0.03)' },
           },
-          rightPriceScale: { borderColor: 'rgba(212, 175, 55, 0.15)', visible: true },
-          timeScale: { borderColor: 'rgba(212, 175, 55, 0.15)', timeVisible: true },
+          rightPriceScale: { borderColor: 'rgba(255, 255, 255, 0.06)', visible: true },
+          timeScale: { borderColor: 'rgba(255, 255, 255, 0.06)', timeVisible: true },
           watermark: {
             visible: true,
             fontSize: 20,
             fontWeight: 'bold',
-            color: 'rgba(212, 175, 55, 0.08)',
+            color: 'rgba(212, 175, 55, 0.06)',
             text: `XAUUSD ${label}`,
           }
         });
