@@ -1,0 +1,14 @@
+{
+  "name": "goldpulse",
+  "version": "1.0.0",
+  "description": "GoldPulse — XAUUSD AI Trading Command Center",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": ["trading", "xauusd", "gold", "forex"],
+  "author": "",
+  "license": "MIT"
+}

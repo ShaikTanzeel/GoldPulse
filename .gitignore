@@ -1,0 +1,42 @@
+# Secrets and Keys
+.env
+*.env.local
+*.key
+credentials/
+
+# Python Virtual Environments & Cache
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Node Modules & Distribution Build files
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# System/IDE temporary folders
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+.DS_Store
+Thumbs.db
+
+# Bridge Server Logs & Traces
+server/*.log
+server/.venv/
+server/__pycache__/
+*.log
+.system_generated/
+tasks/

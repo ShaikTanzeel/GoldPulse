@@ -1,0 +1,4 @@
+MetaTrader5>=5.0.33
+fastapi>=0.95.0
+uvicorn>=0.20.0
+websockets>=11.0

@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="GoldPulse — AI-Powered XAUUSD Trading Command Center with real-time signals, trade journal, and risk management">
+  <title>GoldPulse | XAUUSD Trading Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+  <!-- Loading Screen -->
+  <div id="loadingScreen" class="loading-screen">
+    <div class="loading-content">
+      <div class="pulse-ring"></div>
+      <div class="loading-icon">⚡</div>
+      <h1 class="loading-title">GoldPulse</h1>
+      <p class="loading-subtitle">Initializing Trading Engine...</p>
+      <div class="loading-bar">
+        <div class="loading-bar-fill"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- API Setup Modal -->
+  <div id="apiSetupModal" class="modal-overlay" style="display:none;">
+    <div class="modal glass-card">
+      <div class="modal-header">
+        <h2>⚡ Welcome to GoldPulse</h2>
+        <p>Configure your free API keys to get started</p>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="groqKey">Groq API Key <span class="badge badge-free">FREE</span></label>
+          <input type="password" id="groqKey" placeholder="gsk_..." class="input">
+          <small>Get yours at <a href="https://console.groq.com" target="_blank" rel="noopener">console.groq.com</a> — for AI trade analysis</small>
+        </div>
+        <div class="form-group">
+          <label for="geminiKey">Google Gemini API Key <span class="badge badge-free">FREE</span></label>
+          <input type="password" id="geminiKey" placeholder="AIza..." class="input">
+          <small>Get yours at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com</a> — for chart visual analysis</small>
+        </div>
+        <div class="form-group">
+          <label for="accountBalance">Account Balance ($)</label>
+          <input type="number" id="accountBalance" value="50" min="1" step="0.01" class="input">
+        </div>
+        <div class="form-group">
+          <label for="riskPercent">Risk Per Trade (%)</label>
+          <input type="number" id="riskPercent" value="2" min="0.5" max="5" step="0.5" class="input">
+          <small>Recommended: 1-2% for small accounts</small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="skipSetup" class="btn btn-ghost">Skip for now</button>
+        <button id="saveSetup" class="btn btn-gold">Save & Launch</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Application -->
+  <div id="app" style="display:none;">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-logo">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">GoldPulse</span>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-section="dashboard" id="nav-dashboard">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-item" data-section="signals" id="nav-signals">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <span>Signals</span>
+        </button>
+        <button class="nav-item" data-section="ai" id="nav-ai">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4v1a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2V6a4 4 0 0 1 4-4z"/><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 14v4"/></svg>
+          <span>AI Analysis</span>
+        </button>
+        <button class="nav-item" data-section="journal" id="nav-journal">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <span>Journal</span>
+        </button>
+        <button class="nav-item" data-section="risk" id="nav-risk">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>Risk Calc</span>
+        </button>
+        <button class="nav-item" data-section="settings" id="nav-settings">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <span>Settings</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="connection-status" id="connectionStatus">
+          <span class="status-dot disconnected"></span>
+          <span class="status-text">MT5 Disconnected</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main id="mainContent" class="main-content">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="pair-info">
+            <h1 class="pair-name">XAUUSD</h1>
+            <span class="pair-label">Gold / US Dollar</span>
+          </div>
+          <div class="price-display" id="priceDisplay">
+            <span class="current-price" id="currentPrice">----.--</span>
+            <span class="price-change positive" id="priceChange">+0.00 (0.00%)</span>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <div class="session-indicator" id="sessionIndicator">
+            <span class="session-dot"></span>
+            <span class="session-name">--</span>
+          </div>
+          <div class="spread-display">
+            <span class="spread-label">Spread</span>
+            <span class="spread-value" id="spreadValue">--</span>
+          </div>
+          <div class="account-display">
+            <span class="account-label">Balance</span>
+            <span class="account-value" id="accountDisplay">$50.00</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Dashboard Section -->
+      <section id="section-dashboard" class="section active">
+        <div class="dashboard-grid">
+          <!-- Chart -->
+          <div class="grid-item chart-container glass-card">
+            <div class="card-header">
+              <h3>XAUUSD Chart</h3>
+              <div class="timeframe-selector" id="timeframeSelector">
+                <button class="tf-btn" data-tf="1">M1</button>
+                <button class="tf-btn" data-tf="5">M5</button>
+                <button class="tf-btn active" data-tf="15">M15</button>
+                <button class="tf-btn" data-tf="30">M30</button>
+                <button class="tf-btn" data-tf="60">H1</button>
+                <button class="tf-btn" data-tf="240">H4</button>
+                <button class="tf-btn" data-tf="1440">D1</button>
+              </div>
+            </div>
+            <div id="chartContainer" class="chart-area"></div>
+          </div>
+
+          <!-- Signal Summary -->
+          <div class="grid-item signal-summary glass-card">
+            <div class="card-header">
+              <h3>Signal</h3>
+              <span class="live-badge">LIVE</span>
+            </div>
+            <div class="signal-content" id="signalSummary">
+              <div class="signal-badge-large" id="signalBadge">WAIT</div>
+              <div class="confluence-score" id="confluenceScore">
+                <div class="score-bar">
+                  <div class="score-fill" id="scoreFill" style="width: 50%"></div>
+                  <div class="score-marker" id="scoreMarker" style="left: 50%"></div>
+                </div>
+                <div class="score-labels">
+                  <span>Strong Sell</span>
+                  <span>Neutral</span>
+                  <span>Strong Buy</span>
+                </div>
+              </div>
+              <div class="indicator-readings" id="indicatorReadings">
+                <div class="reading">
+                  <span class="reading-label">EMA Trend</span>
+                  <span class="reading-value neutral" id="emaTrend">--</span>
+                </div>
+                <div class="reading">
+                  <span class="reading-label">RSI (14)</span>
+                  <span class="reading-value" id="rsiValue">--</span>
+                </div>
+                <div class="reading">
+                  <span class="reading-label">MACD</span>
+                  <span class="reading-value" id="macdValue">--</span>
+                </div>
+                <div class="reading">
+                  <span class="reading-label">ATR (14)</span>
+                  <span class="reading-value" id="atrValue">--</span>
+                </div>
+              </div>
+
+              <!-- AI Veto Panel (NEW) -->
+              <div class="ai-veto-panel" id="aiVetoPanel" style="display:none;">
+                <div class="veto-header">
+                  <span class="veto-icon">🤖</span>
+                  <span class="veto-title">AI Assessment</span>
+                  <span class="veto-confidence" id="vetoConfidence">--</span>
+                </div>
+                <div class="veto-action" id="vetoAction">--</div>
+                <div class="veto-alignment" id="vetoAlignment">--</div>
+                <div class="veto-detail" id="vetoDetail"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Trade Setup -->
+          <div class="grid-item trade-setup glass-card">
+            <div class="card-header">
+              <h3>Trade Setup</h3>
+            </div>
+            <div class="trade-setup-content" id="tradeSetup">
+              <div class="setup-row">
+                <span class="setup-label">Entry</span>
+                <span class="setup-value" id="setupEntry">--</span>
+              </div>
+              <div class="setup-row">
+                <span class="setup-label">Stop Loss</span>
+                <span class="setup-value loss" id="setupSL">--</span>
+              </div>
+              <div class="setup-row">
+                <span class="setup-label">Take Profit</span>
+                <span class="setup-value profit" id="setupTP">--</span>
+              </div>
+              <div class="setup-row">
+                <span class="setup-label">Lot Size</span>
+                <span class="setup-value" id="setupLot">--</span>
+              </div>
+              <div class="setup-row">
+                <span class="setup-label">Risk : Reward</span>
+                <span class="setup-value" id="setupRR">--</span>
+              </div>
+              <div class="setup-row">
+                <span class="setup-label">Risk ($)</span>
+                <span class="setup-value loss" id="setupRiskDollar">--</span>
+              </div>
+              <button class="btn btn-gold btn-full" id="logTradeBtn">Log This Trade</button>
+            </div>
+          </div>
+
+          <!-- AI Quick Insight -->
+          <div class="grid-item ai-insight glass-card">
+            <div class="card-header">
+              <h3>AI Insight</h3>
+              <button class="btn btn-sm btn-ghost" id="refreshAI">Analyze</button>
+            </div>
+            <div class="ai-insight-content" id="aiInsight">
+              <p class="ai-placeholder">Click "Analyze" to get AI-powered market analysis for the current setup.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Signals Section -->
+      <section id="section-signals" class="section" style="display:none;">
+        <div class="signals-layout">
+          <div class="glass-card signals-detail-card">
+            <div class="card-header">
+              <h3>Confluence Analysis</h3>
+              <span class="live-badge">LIVE</span>
+            </div>
+            <div id="signalsDetail" class="signals-detail-content"></div>
+          </div>
+          <div class="glass-card signals-history-card">
+            <div class="card-header">
+              <h3>Signal History</h3>
+            </div>
+            <div id="signalHistory" class="signal-history-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- AI Analysis Section -->
+      <section id="section-ai" class="section" style="display:none;">
+        <div class="ai-layout">
+          <div class="glass-card ai-main-card">
+            <div class="card-header">
+              <h3>AI Market Analysis</h3>
+              <div class="ai-controls">
+                <select id="aiModel" class="select-sm">
+                  <option value="groq">Llama 3.3 (Groq)</option>
+                  <option value="gemini">Gemini Flash</option>
+                </select>
+                <button class="btn btn-gold" id="runAnalysis">🤖 Run Analysis</button>
+              </div>
+            </div>
+            <div id="aiOutput" class="ai-output">
+              <div class="ai-welcome">
+                <div class="ai-welcome-icon">🤖</div>
+                <h3>AI Trading Assistant</h3>
+                <p>Analyze current market conditions, get trade ideas, and review your trading performance using free AI models.</p>
+                <div class="ai-actions">
+                  <button class="btn btn-outline" data-ai-action="market">📊 Market Analysis</button>
+                  <button class="btn btn-outline" data-ai-action="trade">🎯 Trade Idea</button>
+                  <button class="btn btn-outline" data-ai-action="risk">⚠️ Risk Check</button>
+                  <button class="btn btn-outline" data-ai-action="learn">📚 Teach Me</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="glass-card ai-history-card">
+            <div class="card-header">
+              <h3>Analysis History</h3>
+            </div>
+            <div id="aiHistory" class="ai-history-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Journal Section -->
+      <section id="section-journal" class="section" style="display:none;">
+        <div class="journal-layout">
+          <!-- Journal Stats -->
+          <div class="journal-stats">
+            <div class="stat-card glass-card">
+              <span class="stat-value" id="totalTrades">0</span>
+              <span class="stat-label">Total Trades</span>
+            </div>
+            <div class="stat-card glass-card">
+              <span class="stat-value positive" id="winRate">0%</span>
+              <span class="stat-label">Win Rate</span>
+            </div>
+            <div class="stat-card glass-card">
+              <span class="stat-value" id="profitFactor">0.0</span>
+              <span class="stat-label">Profit Factor</span>
+            </div>
+            <div class="stat-card glass-card">
+              <span class="stat-value" id="avgRR">0.0</span>
+              <span class="stat-label">Avg R:R</span>
+            </div>
+            <div class="stat-card glass-card">
+              <span class="stat-value" id="netPnL">$0.00</span>
+              <span class="stat-label">Net P&L</span>
+            </div>
+          </div>
+
+          <!-- Equity Curve -->
+          <div class="glass-card equity-card">
+            <div class="card-header">
+              <h3>Equity Curve</h3>
+            </div>
+            <div id="equityChart" class="equity-chart-area"></div>
+          </div>
+
+          <!-- Trade List -->
+          <div class="glass-card trades-card">
+            <div class="card-header">
+              <h3>Trade Log</h3>
+              <div class="trade-controls">
+                <button class="btn btn-gold" id="addTradeBtn">+ New Trade</button>
+                <button class="btn btn-ghost" id="exportCsvBtn">Export CSV</button>
+              </div>
+            </div>
+            <div id="tradeList" class="trade-list">
+              <div class="empty-state">
+                <span class="empty-icon">📝</span>
+                <p>No trades logged yet. Click "+ New Trade" to get started.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Risk Calculator Section -->
+      <section id="section-risk" class="section" style="display:none;">
+        <div class="risk-layout">
+          <div class="glass-card risk-calc-card">
+            <div class="card-header">
+              <h3>Position Size Calculator</h3>
+            </div>
+            <div class="risk-calc-content">
+              <div class="risk-inputs">
+                <div class="form-group">
+                  <label>Account Balance ($)</label>
+                  <input type="number" id="riskBalance" class="input" value="50" min="1" step="0.01">
+                </div>
+                <div class="form-group">
+                  <label>Risk Per Trade (%)</label>
+                  <input type="range" id="riskSlider" min="0.5" max="5" step="0.5" value="2" class="slider">
+                  <div class="slider-value"><span id="riskSliderValue">2.0</span>%</div>
+                </div>
+                <div class="form-group">
+                  <label>Direction</label>
+                  <div class="direction-toggle">
+                    <button class="dir-btn active" data-dir="buy" id="dirBuy">BUY</button>
+                    <button class="dir-btn" data-dir="sell" id="dirSell">SELL</button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Entry Price</label>
+                  <input type="number" id="riskEntry" class="input mono" step="0.01">
+                </div>
+                <div class="form-group">
+                  <label>Stop Loss</label>
+                  <input type="number" id="riskSL" class="input mono" step="0.01">
+                </div>
+                <div class="form-group">
+                  <label>Take Profit</label>
+                  <input type="number" id="riskTP" class="input mono" step="0.01">
+                </div>
+              </div>
+              <div class="risk-results" id="riskResults">
+                <div class="result-item">
+                  <span class="result-label">Position Size</span>
+                  <span class="result-value highlight" id="resultLotSize">0.01</span>
+                  <span class="result-unit">lots</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">Risk Amount</span>
+                  <span class="result-value loss" id="resultRiskAmt">$0.00</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">Reward Amount</span>
+                  <span class="result-value profit" id="resultRewardAmt">$0.00</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">Risk : Reward</span>
+                  <span class="result-value" id="resultRR">--</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">SL Distance</span>
+                  <span class="result-value" id="resultSLDist">-- pips</span>
+                </div>
+                <div class="result-item">
+                  <span class="result-label">TP Distance</span>
+                  <span class="result-value" id="resultTPDist">-- pips</span>
+                </div>
+                <!-- Risk/Reward Visual Bar -->
+                <div class="rr-visual">
+                  <div class="rr-bar">
+                    <div class="rr-risk-zone" id="rrRiskZone"></div>
+                    <div class="rr-entry-line" id="rrEntryLine"></div>
+                    <div class="rr-reward-zone" id="rrRewardZone"></div>
+                  </div>
+                  <div class="rr-labels">
+                    <span class="loss" id="rrSLLabel">SL</span>
+                    <span id="rrEntryLabel">Entry</span>
+                    <span class="profit" id="rrTPLabel">TP</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Risk Rules Card -->
+          <div class="glass-card risk-rules-card">
+            <div class="card-header">
+              <h3>⚠️ Risk Rules for $50 Account</h3>
+            </div>
+            <div class="risk-rules-content">
+              <ul class="rules-list">
+                <li class="rule">
+                  <span class="rule-icon">🎯</span>
+                  <div>
+                    <strong>Max 1-2% risk per trade</strong>
+                    <p>That's $0.50-$1.00 per trade. Discipline is survival.</p>
+                  </div>
+                </li>
+                <li class="rule">
+                  <span class="rule-icon">📏</span>
+                  <div>
+                    <strong>Micro lots only (0.01)</strong>
+                    <p>On XM Ultra Low, 0.01 lot on XAUUSD ≈ $0.01/pip. Perfect for small accounts.</p>
+                  </div>
+                </li>
+                <li class="rule">
+                  <span class="rule-icon">⚖️</span>
+                  <div>
+                    <strong>Minimum 1:2 Risk:Reward</strong>
+                    <p>Never take a trade where potential reward is less than 2x your risk.</p>
+                  </div>
+                </li>
+                <li class="rule">
+                  <span class="rule-icon">🚫</span>
+                  <div>
+                    <strong>Max 1 trade at a time</strong>
+                    <p>With $50, one open position is enough. No overexposure.</p>
+                  </div>
+                </li>
+                <li class="rule">
+                  <span class="rule-icon">📅</span>
+                  <div>
+                    <strong>Avoid news events</strong>
+                    <p>NFP, FOMC, CPI — close or don't open positions before high-impact events.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings Section -->
+      <section id="section-settings" class="section" style="display:none;">
+        <div class="settings-layout">
+          <div class="glass-card settings-card">
+            <div class="card-header">
+              <h3>Settings</h3>
+            </div>
+            <div class="settings-content">
+              <div class="settings-group">
+                <h4>API Keys</h4>
+                <div class="form-group">
+                  <label>Groq API Key</label>
+                  <input type="password" id="settingsGroqKey" class="input" placeholder="gsk_...">
+                </div>
+                <div class="form-group">
+                  <label>Gemini API Key</label>
+                  <input type="password" id="settingsGeminiKey" class="input" placeholder="AIza...">
+                </div>
+              </div>
+              <div class="settings-group">
+                <h4>Account</h4>
+                <div class="form-group">
+                  <label>Account Balance ($)</label>
+                  <input type="number" id="settingsBalance" class="input" value="50">
+                </div>
+                <div class="form-group">
+                  <label>Default Risk (%)</label>
+                  <input type="number" id="settingsRisk" class="input" value="2" min="0.5" max="5" step="0.5">
+                </div>
+                <div class="form-group">
+                  <label>Broker</label>
+                  <input type="text" class="input" value="XM Global Ultra Low Standard" disabled>
+                </div>
+              </div>
+              <div class="settings-group">
+                <h4>MT5 Connection</h4>
+                <div class="form-group">
+                  <label>Server Address</label>
+                  <input type="text" id="settingsMT5Server" class="input" value="localhost:8765">
+                </div>
+                <div class="mt5-status" id="mt5Status">
+                  <span class="status-dot disconnected"></span>
+                  <span>Not connected — Start the Python bridge server</span>
+                </div>
+                <button class="btn btn-outline" id="testConnection">Test Connection</button>
+              </div>
+              <div class="settings-group">
+                <h4>Data Management</h4>
+                <div class="settings-actions">
+                  <button class="btn btn-outline" id="exportData">📦 Export All Data</button>
+                  <button class="btn btn-outline" id="importData">📥 Import Data</button>
+                  <button class="btn btn-danger" id="clearData">🗑️ Clear All Data</button>
+                </div>
+              </div>
+              <button class="btn btn-gold btn-full" id="saveSettings">Save Settings</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- New Trade Modal -->
+  <div id="tradeModal" class="modal-overlay" style="display:none;">
+    <div class="modal glass-card modal-lg">
+      <div class="modal-header">
+        <h2>Log New Trade</h2>
+        <button class="modal-close" id="closeTradeModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="trade-form-grid">
+          <div class="form-group">
+            <label>Direction</label>
+            <div class="direction-toggle">
+              <button class="dir-btn active" data-dir="buy" id="tradeDirBuy">BUY</button>
+              <button class="dir-btn" data-dir="sell" id="tradeDirSell">SELL</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Entry Price</label>
+            <input type="number" id="tradeEntry" class="input mono" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>Stop Loss</label>
+            <input type="number" id="tradeSL" class="input mono" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>Take Profit</label>
+            <input type="number" id="tradeTP" class="input mono" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>Lot Size</label>
+            <input type="number" id="tradeLot" class="input mono" value="0.01" step="0.01" min="0.01">
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="tradeStatus" class="input">
+              <option value="open">Open</option>
+              <option value="win">Closed — Win</option>
+              <option value="loss">Closed — Loss</option>
+              <option value="breakeven">Closed — Breakeven</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Close Price (if closed)</label>
+            <input type="number" id="tradeClose" class="input mono" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>Strategy</label>
+            <select id="tradeStrategy" class="input">
+              <option value="ema-pullback">EMA Pullback</option>
+              <option value="breakout">Breakout</option>
+              <option value="reversal">Reversal</option>
+              <option value="scalp">Scalp</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Emotion</label>
+            <div class="emotion-selector" id="emotionSelector">
+              <button class="emotion-btn" data-emotion="confident" title="Confident">😎</button>
+              <button class="emotion-btn active" data-emotion="neutral" title="Neutral">😐</button>
+              <button class="emotion-btn" data-emotion="fearful" title="Fearful">😰</button>
+              <button class="emotion-btn" data-emotion="fomo" title="FOMO">🤯</button>
+              <button class="emotion-btn" data-emotion="revenge" title="Revenge Trading">😡</button>
+            </div>
+          </div>
+          <div class="form-group full-width">
+            <label>Notes</label>
+            <textarea id="tradeNotes" class="input textarea" rows="3" placeholder="Why did you take this trade? What did you see?"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="cancelTrade">Cancel</button>
+        <button class="btn btn-gold" id="saveTrade">Save Trade</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
