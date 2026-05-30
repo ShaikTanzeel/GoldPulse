@@ -103,6 +103,19 @@ def find_gold_symbol() -> str:
     
     return "XAUUSD"  # fallback
 
+def ensure_connected():
+    global GOLD_SYMBOL
+    if mt5.terminal_info() is None:
+        logger.info("MT5 not connected, attempting to initialize...")
+        if mt5.initialize():
+            logger.info("Re-connected to MT5 terminal successfully.")
+            GOLD_SYMBOL = find_gold_symbol()
+            mt5.symbol_select(GOLD_SYMBOL, True)
+            return True
+        else:
+            return False
+    return True
+
 @app.on_event("startup")
 def startup_event():
     global GOLD_SYMBOL
@@ -138,6 +151,7 @@ def shutdown_event():
 
 @app.get("/api/status")
 def get_status():
+    ensure_connected()
     # MT5 stays initialized from startup — just check terminal_info
     term_info = mt5.terminal_info()
     acc_info = mt5.account_info()
@@ -163,7 +177,7 @@ def get_history(
     """
     Retrieve historical OHLCV data from MT5 for gold (GOLD.i# on XM Global).
     """
-    if mt5.terminal_info() is None:
+    if not ensure_connected():
         return {"error": "MT5 terminal not connected. Is MetaTrader 5 running?"}
 
     mt5_tf = TIMEFRAME_MAP.get(timeframe, mt5.TIMEFRAME_M15)
@@ -197,7 +211,7 @@ def get_multi_timeframe():
     Retrieve OHLCV data for D1, H1, M30, M5 in a single consolidated response.
     Used by the frontend price action engine and AI multi-timeframe analysis.
     """
-    if mt5.terminal_info() is None:
+    if not ensure_connected():
         return {"error": "MT5 terminal not connected. Is MetaTrader 5 running?"}
 
     mt5.symbol_select(GOLD_SYMBOL, True)
@@ -239,7 +253,8 @@ async def proxy_indicator_analysis(payload: dict, x_groq_api_key: str = Header(N
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
     try:
@@ -277,7 +292,8 @@ async def proxy_visual_analysis(payload: dict, x_gemini_api_key: str = Header(No
     # Migrated to Gemini 2.5 Flash (2.0 Flash shuts down June 1, 2026)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     headers = {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
     try:
@@ -329,6 +345,7 @@ async def poll_mt5_prices():
     
     while True:
         try:
+            ensure_connected()
             if len(websocket_clients) > 0 and mt5.terminal_info() is not None:
                 tick = mt5.symbol_info_tick(GOLD_SYMBOL)
                 

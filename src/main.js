@@ -172,6 +172,38 @@ async function launchApplication() {
   }
   
   api.connectLiveFeed(handleLivePriceTick);
+
+  // Periodically poll MT5 Bridge to check actual MetaTrader 5 Terminal connection state
+  setInterval(async () => {
+    try {
+      const response = await fetch('/api/status');
+      if (response.ok) {
+        const data = await response.json();
+        const isConnected = data.status === 'connected';
+        store.set('connected', isConnected);
+        
+        const statusEl = document.getElementById('connectionStatus');
+        if (statusEl) {
+          const dot = statusEl.querySelector('.status-dot');
+          const text = statusEl.querySelector('.status-text');
+          if (isConnected) {
+            dot.className = 'status-dot connected';
+            text.textContent = `MT5 Active (${data.gold_symbol})`;
+          } else {
+            dot.className = 'status-dot disconnected';
+            text.textContent = 'MT5 Terminal Offline';
+          }
+        }
+      }
+    } catch (e) {
+      store.set('connected', false);
+      const statusEl = document.getElementById('connectionStatus');
+      if (statusEl) {
+        statusEl.querySelector('.status-dot').className = 'status-dot disconnected';
+        statusEl.querySelector('.status-text').textContent = 'Bridge Link Offline';
+      }
+    }
+  }, 4000);
 }
 
 function handleConnectionChange(connected) {

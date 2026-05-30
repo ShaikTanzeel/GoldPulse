@@ -141,19 +141,19 @@ export const api = {
 // Generates highly realistic fallback simulated data for testing when MT5 is offline
 function generateSimulatedData(timeframe, count) {
   const data = [];
-  let basePrice = 2340.50; // Starting baseline gold price
-  let time = Math.floor(Date.now() / 1000) - (count * timeframe * 60);
+  let currentPrice = 2356.50; // Unified gold anchor price for simulated fallbacks
+  let time = Math.floor(Date.now() / 1000);
 
   for (let i = 0; i < count; i++) {
-    const volatility = 2.5; // Gold typical 15M volatility
-    const rand = Math.random() - 0.49; // Slightly upward bias
-    const open = basePrice;
-    const close = basePrice + (rand * volatility);
-    const high = Math.max(open, close) + (Math.random() * 1.2);
-    const low = Math.min(open, close) - (Math.random() * 1.2);
+    const volatility = timeframe === 1440 ? 15.0 : timeframe === 60 ? 5.0 : 2.0; // Scaled volatility
+    const rand = Math.random() - 0.5; // Random walk without bias
+    const close = currentPrice;
+    const open = currentPrice - (rand * volatility);
+    const high = Math.max(open, close) + (Math.random() * (volatility * 0.4));
+    const low = Math.min(open, close) - (Math.random() * (volatility * 0.4));
     const volume = Math.floor(Math.random() * 500) + 100;
 
-    data.push({
+    data.unshift({
       time: time,
       open: parseFloat(open.toFixed(2)),
       high: parseFloat(high.toFixed(2)),
@@ -162,8 +162,8 @@ function generateSimulatedData(timeframe, count) {
       volume: volume
     });
 
-    basePrice = close;
-    time += timeframe * 60;
+    currentPrice = open;
+    time -= timeframe * 60;
   }
   return data;
 }
