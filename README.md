@@ -7,7 +7,7 @@ By leveraging a secure **Python FastAPI Local Bridge**, GoldPulse streams live s
 
 ---
 
-![GoldPulse Command Center Dashboard Mockup](goldpulse_dashboard_mockup.png)
+![GoldPulse Command Center Dashboard Mockup](goldpulse_dashboard_mockup)
 
 ---
 
